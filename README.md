@@ -1,2 +1,2 @@
-# rustex
-A Rust Rewrite of TeX
+# RusTeX
+Rewrite TeX in Rust
