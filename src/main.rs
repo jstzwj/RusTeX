@@ -42,6 +42,33 @@ impl<T:Default+Clone> IndexMut<usize> for Array<T> {
     }
 }
 
+// 2
+const banner: &'static str = "This is TeX, Version 3.1415926"; // printed when TEX starts
+
+// 36
+const MemMax: usize = 30000;
+const MemMin: usize = 0;
+const BufSize: i32 = 500;
+const ErrorLine: i32 = 72;
+const HalfErrorLine: i32 = 42;
+const MaxPrintLine: i32 = 79;
+const StackSize: i32 = 200;
+const MaxInOpen: i32 = 6;
+const FontMax: i32 = 75;
+const FontMemSize: i32 = 20000;
+const ParamSize: i32 = 60;
+const NestSize: usize = 40;
+const MaxStrings: i32 = 3000;
+const StringVacancies: i32 = 8000;
+const PoolSize: i32 = 32000;
+const SaveSize: i32 = 600;
+const TrieSize: i32 = 8000;
+const TrieOpSize: i32 = 500;
+const DviBufSize: i32 = 800;
+const FileNameSize: i32 = 40;
+const PoolName: &'static str = "TeXformats:TEX.POOL                     ";
+
+
 // 12 (compiler constants)
 const MemBot: usize = 0;
 const MemTop: usize = 30000;
@@ -141,6 +168,18 @@ impl TwoHalves {
 
     pub fn lh(&self) -> HalfWord {
         LittleEndian::read_u16(&self.data[0..2])
+    }
+
+    pub fn set_lh(&mut self, value: HalfWord) {
+        LittleEndian::write_u16(&mut self.data[0..2], value);
+    }
+}
+
+impl Default for TwoHalves {
+    fn default() -> Self {
+        TwoHalves {
+            data: [0; 4]
+        }
     }
 }
 
@@ -618,6 +657,99 @@ impl EquivRegion6Code {
 #define emergency_stretch dimen_par(emergency_stretch_code)
 */
 
+
+// 269
+enum GroupCode
+{
+	BottomLevel, // group code for the outside world
+	SimpleGroup, // group code for local structure only
+	HboxGroup, // code for `\hbox{...}'
+	AdjustedHboxGroup, // code for `\hbox{...}' in vertical mode
+	VboxGroup, // code for `\vbox{...}'
+	VtopGroup, // code for `\vtop{...}'
+	AlignGroup, // code for `\halign{...}', `\valign{...}'
+	NoAlignGroup, // code for `\noalign{...}'
+	OutputGroup, // code for output routine
+	MathGroup, // code for, e.g., `^{...}'
+	DiscGroup, // code for `\discretionary{...}{...}{...}'
+	InsertGroup, // code for `\insert{...}', `\vadjust{...}'
+	VcenterGroup, // code for `\vcenter{...}'
+	MathChoiceGroup, // code for `\mathchoice{...}{...}{...}'
+	SemiSimpleGroup, // code for `\begingroup...\endgroup'
+	MathShiftGroup, // code for `$...$'
+	MathLeftGroup, // code for `\left...\right'
+}
+
+const BottomLevel: QuarterWord = 0;
+const SimpleGroup: QuarterWord = 1;
+const HboxGroup: QuarterWord = 2;
+const AdjustedHboxGroup: QuarterWord = 3;
+const VboxGroup: QuarterWord = 4;
+const VtopGroup: QuarterWord = 5;
+const AlignGroup: QuarterWord = 6;
+const NoAlignGroup: QuarterWord = 7;
+const OutputGroup: QuarterWord = 8;
+const MathGroup: QuarterWord = 9;
+const DiscGroup: QuarterWord = 10;
+const InsertGroup: QuarterWord = 11;
+const VcenterGroup: QuarterWord = 12;
+const MathChoiceGroup: QuarterWord = 13;
+const SemiSimpleGroup: QuarterWord = 14;
+const MathShiftGroup: QuarterWord = 15;
+const MathLeftGroup: QuarterWord = 16;
+
+const MaxGroupCode: QuarterWord = 16;
+
+
+impl GroupCode {
+    fn value(&self) -> QuarterWord {
+        match self {
+            GroupCode::BottomLevel => BottomLevel,
+            GroupCode::SimpleGroup => SimpleGroup,
+            GroupCode::HboxGroup => HboxGroup,
+            GroupCode::AdjustedHboxGroup => AdjustedHboxGroup,
+            GroupCode::VboxGroup => VboxGroup,
+            GroupCode::VtopGroup => VtopGroup,
+            GroupCode::AlignGroup => AlignGroup,
+            GroupCode::NoAlignGroup => NoAlignGroup,
+            GroupCode::OutputGroup => OutputGroup,
+            GroupCode::MathGroup => MathGroup,
+            GroupCode::DiscGroup => DiscGroup,
+            GroupCode::InsertGroup => InsertGroup,
+            GroupCode::VcenterGroup => VcenterGroup,
+            GroupCode::MathChoiceGroup => MathChoiceGroup,
+            GroupCode::SemiSimpleGroup => SemiSimpleGroup,
+            GroupCode::MathShiftGroup => MathShiftGroup,
+            GroupCode::MathLeftGroup => MathLeftGroup,
+        }
+    }
+
+    fn from(value:QuarterWord) -> GroupCode {
+        match value {
+            BottomLevel =>  GroupCode::BottomLevel,
+            SimpleGroup =>  GroupCode::SimpleGroup,
+            HboxGroup   =>  GroupCode::HboxGroup,
+            AdjustedHboxGroup   =>  GroupCode::AdjustedHboxGroup,
+            VboxGroup   =>  GroupCode::VboxGroup,
+            VtopGroup   =>  GroupCode::VtopGroup,
+            AlignGroup  =>  GroupCode::AlignGroup,
+            NoAlignGroup    =>  GroupCode::NoAlignGroup,
+            OutputGroup =>  GroupCode::OutputGroup,
+            MathGroup   =>  GroupCode::MathGroup,
+            DiscGroup   =>  GroupCode::DiscGroup,
+            InsertGroup =>  GroupCode::InsertGroup,
+            VcenterGroup    =>  GroupCode::VcenterGroup,
+            MathChoiceGroup =>  GroupCode::MathChoiceGroup,
+            SemiSimpleGroup =>  GroupCode::SemiSimpleGroup,
+            MathShiftGroup  =>  GroupCode::MathShiftGroup,
+            MathLeftGroup   =>  GroupCode::MathLeftGroup,
+        }
+    }
+}
+
+/**
+ * Main TexState
+ */
 impl TexState {
     fn dimen(&self, s: HalfWord) -> i32{
         self.eqtb[(ScaledBase + s)as usize].int()
@@ -632,6 +764,40 @@ impl TexState {
     }
 }
 
+// 256
+impl TwoHalves {
+    // link for coalesced lists
+    fn next(&self) -> HalfWord {
+        self.lh()
+    }
+
+    fn set_next(&mut self, value: HalfWord) {
+        self.set_lh(value);
+    }
+
+    // string number for control sequence name
+    fn text(&mut self) -> HalfWord {
+        self.rh()
+    }
+
+    fn set_text(&mut self, value: HalfWord) {
+        self.set_rh(value)
+    }
+}
+
+// test if all positions are occupied
+fn hash_is_full(hash_used: HalfWord, hash_base: HalfWord) -> bool {
+    hash_used == hash_base
+}
+
+// a frozen font identifier's name
+fn font_id_text(hash: &Array<TwoHalves>, n: HalfWord) -> HalfWord {
+    hash[(FontIdBase + n) as usize].lh()
+}
+
+fn set_font_id_text(hash: &mut Array<TwoHalves>, n: HalfWord, value: HalfWord) {
+    hash[(FontIdBase + n) as usize].set_lh(value);
+}
 
 pub enum History
 {
@@ -737,15 +903,15 @@ pub struct TexState
 
     // 165
     // debug
-    _free: [bool;TexState::mem_max],
-    was_free: [bool;TexState::mem_max],
+    _free: [bool;MemMax],
+    was_free: [bool;MemMax],
     was_mem_end: HalfWord,
     was_lo_max: HalfWord,
     was_hi_min: HalfWord,
     panicking: bool,
 
     // 213
-    nest: [ListStateRecord; TexState::nest_size],
+    nest: [ListStateRecord; NestSize],
     nest_ptr: usize, // 0..nestsize
     max_nest_stack: usize, // 0..nestsize
     curlist:ListStateRecord,
@@ -754,6 +920,20 @@ pub struct TexState
     // 253
     eqtb: Array<MemoryWord>,
     xeq_level: Array<QuarterWord>,
+
+    // 256
+    hash: Array<TwoHalves>, // the hash table <hash_base, undefined_control_sequence - 1>
+    hash_used: Pointer, // allocation pointer for hash
+    no_new_control_sequence: bool, // are new identifiers legal?
+    cs_count: i32, // total number of known identifiers
+
+    // 271
+    save_stack: Array<MemoryWord>, // Array<memory_word, 0, save_size>
+    save_ptr: i32, // first unused entry on save_stack
+    max_save_stack: i32, // maximum usage of save stack
+    cur_level: QuarterWord, // current nesting level for groups
+    cur_group: GroupCode, // current group type
+    cur_boundary: i32, // where the current level begins
 
     // 980
     page_tail: HalfWord,
@@ -773,31 +953,6 @@ pub struct TexState
 
 impl TexState
 {
-    // 2
-    const banner: &'static str = "This is TeX, Version 3.1415926"; // printed when TEX starts
-
-    const mem_max: usize = 30000;
-    const mem_min: usize = 0;
-    const buf_size: i32 = 500;
-    const error_line: i32 = 72;
-    const half_error_line: i32 = 42;
-    const max_print_line: i32 = 79;
-    const stack_size: i32 = 200;
-    const max_in_open: i32 = 6;
-    const font_max: i32 = 75;
-    const font_mem_size: i32 = 20000;
-    const param_size: i32 = 60;
-    const nest_size: usize = 40;
-    const max_strings: i32 = 3000;
-    const string_vacancies: i32 = 8000;
-    const pool_size: i32 = 32000;
-    const save_size: i32 = 600;
-    const trie_size: i32 = 8000;
-    const trie_op_size: i32 = 500;
-    const dvi_buf_size: i32 = 800;
-    const file_name_size: i32 = 40;
-    const pool_name: &'static str = "TeXformats:TEX.POOL                     ";
-
     const format_default_length: i32 = 9;
     const format_area_length: i32 = 0;
     const format_ext_length: i32 = 4;
@@ -834,7 +989,7 @@ impl TexState
             glue_ratio: 0.,
 
             // 116
-            mem: Array::new(TexState::mem_min, TexState::mem_max), // the big dynamic storage area
+            mem: Array::new(MemMin, MemMax), // the big dynamic storage area
             lo_mem_max: 0, // the largest location of variable-size memory in use
             hi_mem_min: 0, // the smallest location of one-word memory in use
 
@@ -851,15 +1006,15 @@ impl TexState
 
             // 165
             // debug
-            _free: [false;TexState::mem_max],
-            was_free: [false;TexState::mem_max],
+            _free: [false;MemMax],
+            was_free: [false;MemMax],
             was_mem_end: 0,
             was_lo_max: 0,
             was_hi_min: 0,
             panicking: false,
 
             // 213
-            nest: [ListStateRecord::new(); TexState::nest_size],
+            nest: [ListStateRecord::new(); NestSize],
             nest_ptr: 0,
             max_nest_stack: 0,
             curlist: ListStateRecord::new(),
@@ -868,6 +1023,21 @@ impl TexState
             // 253
             eqtb: Array::new(EquivRegion2Code::ActiveBase.value() as usize, EqtbSize as usize),
             xeq_level: Array::new(IntBase as usize, EqtbSize as usize),
+
+            // 256
+            hash: Array::new(HashBase as usize, UndefinedControlSequence as usize - 1),
+            hash_used: 0,
+            no_new_control_sequence: false,
+            cs_count: 0,
+
+            // 271
+            save_stack: Array::new(0, SaveSize as usize),
+            save_ptr: 0,
+            max_save_stack: 0,
+            cur_level: 0,
+            cur_group: GroupCode::AlignGroup,
+            cur_boundary: 0,
+
 
             // 980
             page_tail: 0,
@@ -960,9 +1130,9 @@ fn initialize(state: &mut TexState) {
     // 166
     #[cfg(not(feature = "debug"))]
     {
-        state.was_mem_end = TexState::mem_min as HalfWord;
-        state.was_lo_max = TexState::mem_min as HalfWord;
-        state.was_hi_min = TexState::mem_max as HalfWord;
+        state.was_mem_end = MemMin as HalfWord;
+        state.was_lo_max = MemMin as HalfWord;
+        state.was_hi_min = MemMax as HalfWord;
         state.panicking = false;
     }
 
@@ -992,6 +1162,119 @@ fn initialize(state: &mut TexState) {
     for k in IntBase..=EqtbSize {
         state.xeq_level[k as usize] = 1;
     }
+
+    
+	// 257
+    state.no_new_control_sequence = true;
+    state.hash[HashBase as usize].set_next(0);
+    state.hash[HashBase as usize].set_next(0);
+    state.hash[HashBase as usize].set_text(0);
+    for k in HashBase + 1 ..= UndefinedControlSequence - 1 {
+        state.hash[k as usize] = state.hash[HashBase as usize];
+    }	
+
+	// 272
+    state.save_ptr = 0;
+    state.cur_level = LevelOne as QuarterWord;
+    state.cur_group = GroupCode::from(BottomLevel);
+    state.cur_boundary = 0;
+	state.max_save_stack = 0;
+
+	// 287
+	state.mag_set = 0;
+
+
+	// 383
+    state.top_mark = Null;
+    state.first_mark = Null;
+    state.bot_mark = Null;
+    state.split_first_mark = Null;
+	state.split_bot_mark = Null;
+
+	// 439
+    state.cur_val = 0;
+    state.cur_val_level = int_val;
+    state.radix = 0;
+    state.cur_order = normal;
+
+    // 481
+    for k in 0..=16 {
+        state.read_open[k] = closed;
+    }	
+
+	// 490
+	state.cond_ptr = Null;
+	state.if_limit = normal; state.cur_if = 0; state.if_line = 0;
+
+	// 521
+	strcpy(TEX_format_default.get_c_str(),"plain.fmt");
+
+	// 551
+	for (k = font_base; k <= font_max; k++)
+		font_used[k] = false;
+
+	// 556
+	null_character.b0 = min_quarterword; null_character.b1 = min_quarterword;
+	null_character.b2 = min_quarterword; null_character.b3 = min_quarterword;
+
+
+	// 593
+	total_pages = 0; max_v = 0; max_h = 0; max_push = 0; last_bop = -1; doing_leaders = false;
+	dead_cycles = 0; cur_s = -1;
+
+	// 596
+	half_buf = dvi_buf_size / 2; dvi_limit = dvi_buf_size; dvi_ptr = 0; dvi_offset = 0;
+	dvi_gone = 0;
+
+
+	// 606
+	down_ptr = null; right_ptr = null;
+
+	// 648
+	adjust_tail = null; last_badness = 0;
+
+	// 662
+	pack_begin_line = 0;
+
+	// 685
+	empty_field.rh = empty; empty_field.lh = null;
+	null_delimiter.b0 = 0; null_delimiter.b1 = min_quarterword;
+	null_delimiter.b2 = 0; null_delimiter.b3 = min_quarterword;
+
+	// 771
+	align_ptr = null; cur_align = null; cur_span = null; cur_loop = null;
+	cur_head = null; cur_tail = null;
+
+	// 928
+	for (z = 0; z <= hyph_size; z++) {
+		hyph_word[z] = 0; hyph_list[z] = null;
+	}
+	hyph_count = 0;
+
+	// 990
+	output_active = false;
+	insert_penalties = 0;
+
+	// 1033
+	ligature_present = false;
+	cancel_boundary = false;
+	lft_hit = false;
+	rt_hit = false;
+	ins_disc = false;
+
+
+	// 1267
+	after_token = 0;
+
+	// 1282
+	long_help_seen = false;
+
+	// 1300
+	format_ident = 0;
+
+	// 1343
+	for (k = 0; k <= 17; k++)
+		write_open[k] = false;
     
     // Initialize table entries
     #[cfg(not(feature = "release"))]
@@ -1020,21 +1303,21 @@ fn do_final_end(state:&mut TexState) -> i32
 fn main() {
     let mut state = TexState::new();
 
-    println!("{}", TexState::banner);
+    println!("{}", banner);
 
     state.history = History::FatalErrorStop;
 
     // check consts
     if state.ready_already != 314159 {
 		let mut bad = 0;
-        if TexState::half_error_line<30 || TexState::half_error_line > TexState::error_line - 15
+        if HalfErrorLine<30 || HalfErrorLine > ErrorLine - 15
         { bad = 1; }
 
-        if TexState::max_print_line < 60 { bad = 2; }
-        if TexState::dvi_buf_size % 8 != 0 { bad = 3; }
+        if MaxPrintLine < 60 { bad = 2; }
+        if DviBufSize % 8 != 0 { bad = 3; }
         if MemBot + 1100 > MemTop { bad = 4; }
         if HashPrime > HashSize { bad = 5; }
-        if TexState::max_in_open >= 128 { bad = 6; }
+        if MaxInOpen >= 128 { bad = 6; }
         if MemTop < 256 + 11 { bad = 7; }
 
         // 111
@@ -1047,21 +1330,21 @@ fn main() {
             }
         }
 
-        if TexState::mem_min > MemBot || TexState::mem_max < MemTop { bad = 10; }
+        if MemMin > MemBot || MemMax < MemTop { bad = 10; }
         if MinQuarterWord > 0 || MaxQuarterWord < 127 { bad = 11; }
         if MinHalfWord > 0 || MaxHalfWord < 32767 { bad = 12; }
         if (MinQuarterWord as HalfWord) < MinHalfWord 
             || MaxQuarterWord as HalfWord > MaxHalfWord { bad = 13; }
-        if TexState::mem_min < MinHalfWord as usize
-            || TexState::mem_max >= MaxHalfWord as usize
-            || MemBot - TexState::mem_min > MaxHalfWord as usize + 1
+        if MemMin < MinHalfWord as usize
+            || MemMax >= MaxHalfWord as usize
+            || MemBot - MemMin > MaxHalfWord as usize + 1
             {
                 bad = 14;
             }
         if FontBase < MinQuarterWord as i32
-            || TexState::font_max > MaxQuarterWord as i32 { bad = 15; }
-        if TexState::font_max > FontBase + 256 { bad = 16; }
-        if TexState::save_size > MaxHalfWord as i32 { bad = 18; }
+            || FontMax > MaxQuarterWord as i32 { bad = 15; }
+        if FontMax > FontBase + 256 { bad = 16; }
+        if SaveSize > MaxHalfWord as i32 { bad = 18; }
         if MaxQuarterWord - MinQuarterWord < 255 { bad = 19; }
 
         //290
@@ -1071,10 +1354,10 @@ fn main() {
         }
 
         // 522
-        if TexState::format_default_length > TexState::file_name_size { bad = 31; }
+        if TexState::format_default_length > FileNameSize { bad = 31; }
 
         // 1249
-        if (2 * MaxHalfWord as usize) < MemTop - TexState::mem_min { bad = 41; }
+        if (2 * MaxHalfWord as usize) < MemTop - MemMin { bad = 41; }
 
         if bad > 0 {
             wterm_ln(&format!("Ouch---my internal constants have been clobbered!\n---case {}\n", bad));
