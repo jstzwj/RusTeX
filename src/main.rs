@@ -115,6 +115,30 @@ impl Interaction {
     }
 }
 
+// 76
+
+
+pub enum History
+{
+    Spotless,
+    WarningIssued,
+    ErrorMessageIssued,
+    FatalErrorStop,
+}
+
+
+impl History {
+    fn value(&self) -> i32 {
+        match self {
+            History::Spotless => 0,
+            History::WarningIssued => 1,
+            History::ErrorMessageIssued => 2,
+            History::FatalErrorStop => 3,
+        }
+    }
+}
+
+
 // 101
 const unity: i32 = 0200000;
 const two: i32 = 0400000;
@@ -743,6 +767,7 @@ impl GroupCode {
             SemiSimpleGroup =>  GroupCode::SemiSimpleGroup,
             MathShiftGroup  =>  GroupCode::MathShiftGroup,
             MathLeftGroup   =>  GroupCode::MathLeftGroup,
+            _ => panic!("GroupCode no found")
         }
     }
 }
@@ -799,26 +824,59 @@ fn set_font_id_text(hash: &mut Array<TwoHalves>, n: HalfWord, value: HalfWord) {
     hash[(FontIdBase + n) as usize].set_lh(value);
 }
 
-pub enum History
-{
-    Spotless,
-    WarningIssued,
-    ErrorMessageIssued,
-    FatalErrorStop,
+// 382
+const top_mark_code: usize = 0; // the mark in effect at the previous page break
+const first_mark_code: usize = 1; // the first mark between top_mark and bot_mark
+const bot_mark_code: usize = 2; // the mark in effect at the current page break
+const split_first_mark_code: usize = 3; // the first mark found by \vsplit
+const split_bot_mark_code: usize = 4; // the last mark found by \vsplit
+
+macro_rules! top_mark {
+    ($state:expr) => {
+        $state.cur_mark[top_mark_code]
+    };
+}
+
+macro_rules! first_mark {
+    ($state:expr) => {
+        $state.cur_mark[first_mark_code]
+    };
+}
+
+macro_rules! bot_mark {
+    ($state:expr) => {
+        $state.cur_mark[bot_mark_code]
+    };
+}
+
+macro_rules! split_first_mark {
+    ($state:expr) => {
+        $state.cur_mark[split_first_mark_code]
+    };
+}
+
+macro_rules! split_bot_mark {
+    ($state:expr) => {
+        $state.cur_mark[split_bot_mark_code]
+    };
 }
 
 
-impl History {
-    fn value(&self) -> i32 {
-        match self {
-            History::Spotless => 0,
-            History::WarningIssued => 1,
-            History::ErrorMessageIssued => 2,
-            History::FatalErrorStop => 3,
-        }
-    }
-}
-
+// 289
+const cs_token_flag: i32 = 0o7777; // amount added to the eqtb location in a token that stands for a control
+                                 // sequence; is a multiple of 256, less 1
+const left_brace_token: i32 = 0o400; // 2^8*left_brace
+const left_brace_limit: i32 = 0o1000; // 2^8*(left_brace+1)
+const right_brace_token: i32 = 0o1000; // 2^8*right_brace
+const right_brace_limit: i32 = 0o1400; // 2^8*(right_brace+1)
+const math_shift_token: i32 = 0o1400; // 2^8*math_shift
+const tab_token: i32 = 0o2000; // 2^8*tab_mark
+const out_param_token: i32 = 0o2400; // 2^8*out_param
+const space_token: i32 = 0o5040; // 2^8*spacer + " "
+const letter_token: i32 = 0o5400; // 2^8*letter
+const other_token: i32 = 0o6000; // 2^8*other_char
+const match_token: i32 = 0o6400; // 2^8*match
+const end_match_token: i32 = 0o7000; // 2^8*end_match
 
 pub enum TokenList
 {
@@ -856,6 +914,14 @@ impl TokenList {
         }
     }
 }
+
+// 410
+const int_val: i32 = 0; // integer values
+const dimen_val: i32 = 1; // dimension values
+const glue_val: i32 = 2; // glue specifications
+const mu_val: i32 = 3; // math glue specifications
+const ident_val: i32 = 4; // font identifier
+const tok_val: i32 = 5; // token lists
 
 
 type StrNumber = i32;
@@ -934,6 +1000,16 @@ pub struct TexState
     cur_level: QuarterWord, // current nesting level for groups
     cur_group: GroupCode, // current group type
     cur_boundary: i32, // where the current level begins
+
+    // 286
+    mag_set: i32, // if nonzero, this magnification should be used henceforth
+
+    // 382
+    cur_mark: Array<Pointer>, // token list for marks <top_mark_code, split_bot_mark_code>
+
+    // 410
+    cur_val: i32, // value returned by numeric scanners
+    cur_val_level: i32, // int_val..tok_val, the ``level'' of this value
 
     // 980
     page_tail: HalfWord,
@@ -1038,6 +1114,16 @@ impl TexState
             cur_group: GroupCode::AlignGroup,
             cur_boundary: 0,
 
+            
+            // 286
+            mag_set: 0, // if nonzero, this magnification should be used henceforth
+
+            // 382
+            cur_mark: Array::new(top_mark_code, split_bot_mark_code),
+
+            // 410
+            cur_val: 0,
+            cur_val_level: 0,
 
             // 980
             page_tail: 0,
@@ -1185,11 +1271,11 @@ fn initialize(state: &mut TexState) {
 
 
 	// 383
-    state.top_mark = Null;
-    state.first_mark = Null;
-    state.bot_mark = Null;
-    state.split_first_mark = Null;
-	state.split_bot_mark = Null;
+    top_mark!(state) = Null;
+    first_mark!(state) = Null;
+    bot_mark!(state) = Null;
+    split_first_mark!(state) = Null;
+	split_bot_mark!(state) = Null;
 
 	// 439
     state.cur_val = 0;
@@ -1274,7 +1360,7 @@ fn initialize(state: &mut TexState) {
 
 	// 1343
 	for (k = 0; k <= 17; k++)
-		write_open[k] = false;
+        write_open[k] = false;
     
     // Initialize table entries
     #[cfg(not(feature = "release"))]
