@@ -235,8 +235,20 @@ impl MemoryWord {
         LittleEndian::read_i32(&self.data)
     }
 
+    pub fn sc(&self) -> i32 {
+        LittleEndian::read_i32(&self.data)
+    }
+
     pub fn gr(&self) -> GlueRatio {
         LittleEndian::read_f32(&self.data)
+    }
+
+    pub fn hh_b0(&self) -> u8 {
+        self.data[2]
+    }
+
+    pub fn hh_b1(&self) -> u8 {
+        self.data[3]
     }
 
     pub fn hh_rh(&self) -> u16 {
@@ -280,23 +292,93 @@ type Pointer = HalfWord;
 const Null: HalfWord = MinHalfWord; // the null pointer
 
 // 118
-impl MemoryWord {
-    fn get_link(&self) -> HalfWord {
-        self.hh_rh()
+impl TexState {
+    fn link(&self, n:usize) -> HalfWord {
+        self.mem[n].hh_rh()
     }
 
-    fn get_info(&self) -> HalfWord {
-        self.hh_lh()
+    fn info(&self, n:usize) -> HalfWord {
+        self.mem[n].hh_lh()
     }
 
-    fn set_link(&mut self, value: HalfWord) {
-        self.set_hh_rh(value);
+    fn set_link(&mut self, n:usize, value: HalfWord) {
+        self.mem[n].set_hh_rh(value);
     }
 
-    fn set_info(&mut self, value: HalfWord) {
-        self.set_hh_lh(value);
+    fn set_info(&mut self, n:usize, value: HalfWord) {
+        self.mem[n].set_hh_lh(value);
     }
 }
+
+//133
+impl TexState {
+    // identifies what kind of node this is
+    fn a_type(&self, n:usize) -> u8{
+        self.mem[n].hh_b0()
+    }
+
+    // secondary identification in some cases
+    fn subtype(&self, n:usize) -> u8{
+        self.mem[n].hh_b1()
+    }
+}
+
+// 135
+const HlistNode: i32 = 0;
+const BoxNodeSize: i32 = 7; // number of words to allocate for a box node
+const WidthOffset: usize = 1; // position of width field in a box node
+const DepthOffset: usize = 2; // position of depth field in a box node
+const HeightOffset: usize = 3; // position of height field in a box node
+
+
+impl TexState {
+    // width of the box, in sp
+    fn width(&self, n:usize) -> i32 {
+        self.mem[n + WidthOffset].sc()
+    }
+
+    // depth of the box, in sp
+    fn depth(&self, n:usize) -> i32 {
+        self.mem[n + DepthOffset].sc()
+    }
+
+    // height of the box, in sp
+    fn height(&self, n:usize) -> i32 {
+        self.mem[n + HeightOffset].sc()
+    }
+
+    // repositioning distance, in sp
+    fn shift_amount(&self, n:usize) -> i32 {
+        self.mem[n + 4].sc()
+    }
+
+    // beginning of the list inside the box
+    fn list_ptr(&self, n:usize) -> HalfWord {
+        self.link(n + ListOffset)
+    }
+
+    // applicable order of infinity
+    fn glue_order(&self, n:usize) -> u8 {
+        self.subtype(n + ListOffset)
+    }
+
+    // stretching or shrinking
+    fn glue_sign(&self, n:usize) -> u8 {
+        self.a_type(n + ListOffset)
+    }
+
+    // a word of type glue_ratio for glue setting
+    fn glue_set(&self, n:usize) -> GlueRatio {
+        self.mem[n+GlueOffset].gr()
+    }
+}
+
+const ListOffset: usize = 5; // position of list_ptr field in a box node
+ 
+const Normal: i32 = 0; // the most common case when several cases are named
+const Stretching: i32 = 1; // glue setting applies to the stretch components
+const Shrinking: i32 = 2; // glue setting applies to the shrink components
+const GlueOffset: usize = 6; // position of glue_set in a box node
 
 // glue 150
 const GlueSpecSize: usize = 4; // number of words to allocate for a glue specification
@@ -824,43 +906,6 @@ fn set_font_id_text(hash: &mut Array<TwoHalves>, n: HalfWord, value: HalfWord) {
     hash[(FontIdBase + n) as usize].set_lh(value);
 }
 
-// 382
-const top_mark_code: usize = 0; // the mark in effect at the previous page break
-const first_mark_code: usize = 1; // the first mark between top_mark and bot_mark
-const bot_mark_code: usize = 2; // the mark in effect at the current page break
-const split_first_mark_code: usize = 3; // the first mark found by \vsplit
-const split_bot_mark_code: usize = 4; // the last mark found by \vsplit
-
-macro_rules! top_mark {
-    ($state:expr) => {
-        $state.cur_mark[top_mark_code]
-    };
-}
-
-macro_rules! first_mark {
-    ($state:expr) => {
-        $state.cur_mark[first_mark_code]
-    };
-}
-
-macro_rules! bot_mark {
-    ($state:expr) => {
-        $state.cur_mark[bot_mark_code]
-    };
-}
-
-macro_rules! split_first_mark {
-    ($state:expr) => {
-        $state.cur_mark[split_first_mark_code]
-    };
-}
-
-macro_rules! split_bot_mark {
-    ($state:expr) => {
-        $state.cur_mark[split_bot_mark_code]
-    };
-}
-
 
 // 289
 const cs_token_flag: i32 = 0o7777; // amount added to the eqtb location in a token that stands for a control
@@ -915,16 +960,60 @@ impl TokenList {
     }
 }
 
-// 410
-const int_val: i32 = 0; // integer values
-const dimen_val: i32 = 1; // dimension values
-const glue_val: i32 = 2; // glue specifications
-const mu_val: i32 = 3; // math glue specifications
-const ident_val: i32 = 4; // font identifier
-const tok_val: i32 = 5; // token lists
+// 382
+const top_mark_code: usize = 0; // the mark in effect at the previous page break
+const first_mark_code: usize = 1; // the first mark between top_mark and bot_mark
+const bot_mark_code: usize = 2; // the mark in effect at the current page break
+const split_first_mark_code: usize = 3; // the first mark found by \vsplit
+const split_bot_mark_code: usize = 4; // the last mark found by \vsplit
 
+macro_rules! top_mark {
+    ($state:expr) => {
+        $state.cur_mark[top_mark_code]
+    };
+}
+
+macro_rules! first_mark {
+    ($state:expr) => {
+        $state.cur_mark[first_mark_code]
+    };
+}
+
+macro_rules! bot_mark {
+    ($state:expr) => {
+        $state.cur_mark[bot_mark_code]
+    };
+}
+
+macro_rules! split_first_mark {
+    ($state:expr) => {
+        $state.cur_mark[split_first_mark_code]
+    };
+}
+
+macro_rules! split_bot_mark {
+    ($state:expr) => {
+        $state.cur_mark[split_bot_mark_code]
+    };
+}
+
+// 410
+const IntVal: i32 = 0; // integer values
+const DimenVal: i32 = 1; // dimension values
+const GlueVal: i32 = 2; // glue specifications
+const MuVal: i32 = 3; // math glue specifications
+const IdentVal: i32 = 4; // font identifier
+const TokVal: i32 = 5; // token lists
 
 type StrNumber = i32;
+
+// 438
+const octal_token: i32 = other_token + /*'*/39; // apostrophe, indicates an octal constant
+const hex_token: i32 = other_token + /*"*/34; // double quote, indicates a hex constant
+const alpha_token: i32 = other_token + /*`*/96; // reverse apostrophe, precedes alpha constants
+const point_token: i32 = other_token + /*.*/46; // decimal point
+const continental_point_token: i32 = other_token + /*,*/44; // decimal point, Eurostyle
+
 
 pub struct TexState
 {
@@ -1010,6 +1099,12 @@ pub struct TexState
     // 410
     cur_val: i32, // value returned by numeric scanners
     cur_val_level: i32, // int_val..tok_val, the ``level'' of this value
+
+    // 438
+    radix: SmallNumber, // scan_int sets this to 8, 10, 16, or zero
+
+    // 447
+    cur_order: GlueOrd, // order of infinity found by scan_dimen
 
     // 980
     page_tail: HalfWord,
@@ -1125,6 +1220,12 @@ impl TexState
             cur_val: 0,
             cur_val_level: 0,
 
+            // 438
+            radix: 0,
+
+            // 447
+            cur_order: 0,
+
             // 980
             page_tail: 0,
             page_contents: 0, // 0..2
@@ -1236,7 +1337,7 @@ fn initialize(state: &mut TexState) {
     // 991
     state.page_contents = Empty as u8;
     state.page_tail = PageHead as HalfWord;
-    state.mem[PageHead].set_link(Null);
+    state.set_link(PageHead, Null);
     
     state.last_glue = MaxHalfWord;
     state.last_penalty = 0;
@@ -1279,9 +1380,9 @@ fn initialize(state: &mut TexState) {
 
 	// 439
     state.cur_val = 0;
-    state.cur_val_level = int_val;
+    state.cur_val_level = IntVal;
     state.radix = 0;
-    state.cur_order = normal;
+    state.cur_order = Normal;
 
     // 481
     for k in 0..=16 {
@@ -1296,8 +1397,9 @@ fn initialize(state: &mut TexState) {
 	strcpy(TEX_format_default.get_c_str(),"plain.fmt");
 
 	// 551
-	for (k = font_base; k <= font_max; k++)
-		font_used[k] = false;
+	for k in FontBase..=FontMax {
+        state.font_used[k] = false;
+    }
 
 	// 556
 	null_character.b0 = min_quarterword; null_character.b1 = min_quarterword;
@@ -1323,19 +1425,19 @@ fn initialize(state: &mut TexState) {
 	pack_begin_line = 0;
 
 	// 685
-	empty_field.rh = empty; empty_field.lh = null;
+	empty_field.rh = empty; empty_field.lh = Null;
 	null_delimiter.b0 = 0; null_delimiter.b1 = min_quarterword;
 	null_delimiter.b2 = 0; null_delimiter.b3 = min_quarterword;
 
 	// 771
-	align_ptr = null; cur_align = null; cur_span = null; cur_loop = null;
-	cur_head = null; cur_tail = null;
+	align_ptr = Null; cur_align = Null; cur_span = Null; cur_loop = Null;
+	cur_head = Null; cur_tail = Null;
 
 	// 928
-	for (z = 0; z <= hyph_size; z++) {
-		hyph_word[z] = 0; hyph_list[z] = null;
+	for z in 0..=HyphSize {
+		state.hyph_word[z] = 0; state.hyph_list[z] = Null;
 	}
-	hyph_count = 0;
+	state.hyph_count = 0;
 
 	// 990
 	output_active = false;
@@ -1359,9 +1461,10 @@ fn initialize(state: &mut TexState) {
 	format_ident = 0;
 
 	// 1343
-	for (k = 0; k <= 17; k++)
+	for k in 0..=17 {
         write_open[k] = false;
-    
+    }
+
     // Initialize table entries
     #[cfg(not(feature = "release"))]
     {
