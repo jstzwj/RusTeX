@@ -45,6 +45,14 @@ impl<T:Default+Clone> IndexMut<usize> for Array<T> {
 // 2
 const banner: &'static str = "This is TeX, Version 3.1415926"; // printed when TEX starts
 
+// 18
+type ASCIICode = u8;
+
+// 19
+type TextChar = u8; // The data type of characters in text files
+const first_text_char: i32 = 0; // Ordinal number of the smallest element of text_char
+const last_text_char: i32 = 255; // Ordinal number of the largest element of text_char
+
 // 36
 const MemMax: usize = 30000;
 const MemMin: usize = 0;
@@ -68,6 +76,10 @@ const DviBufSize: i32 = 800;
 const FileNameSize: i32 = 40;
 const PoolName: &'static str = "TeXformats:TEX.POOL                     ";
 
+// 38
+type PoolPointer = usize; // 0 .. pool_size, for variables that point into str_pool
+type StrNumber = i32; // 0 .. max_strings, for variables that point into str_start
+type PackedASCIICode = u8; // 0 .. 255, elements of str_pool array
 
 // 12 (compiler constants)
 const MemBot: usize = 0;
@@ -1005,7 +1017,6 @@ const MuVal: i32 = 3; // math glue specifications
 const IdentVal: i32 = 4; // font identifier
 const TokVal: i32 = 5; // token lists
 
-type StrNumber = i32;
 
 // 438
 const octal_token: i32 = other_token + /*'*/39; // apostrophe, indicates an octal constant
@@ -1019,8 +1030,8 @@ pub struct TexState
 {
     ready_already: i32,
     // 20
-    xord: [u8;256],
-    xchr: [u8;256],
+    xord: Array<ASCIICode>,
+    xchr: Array<TextChar>,
 
     // 76
     deletions_allowed: bool,
@@ -1138,8 +1149,8 @@ impl TexState
         return TexState {
             ready_already: 0,
             // 20
-            xord: [0;256],
-            xchr: [0;256],
+            xord: Array::new(0, 255),
+            xchr: Array::new(0, 255),
 
             // 76
             deletions_allowed: false,
