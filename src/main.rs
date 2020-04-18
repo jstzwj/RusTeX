@@ -26,6 +26,10 @@ impl<T:Default+Clone> Array<T> {
             data: vec![Default::default(); max - min + 1],
         }
     }
+
+    pub fn size(&self) -> usize {
+        self.max - self.min
+    }
 }
 
 impl<T:Default+Clone> Index<usize> for Array<T> {
@@ -52,6 +56,11 @@ type ASCIICode = u8;
 type TextChar = u8; // The data type of characters in text files
 const first_text_char: i32 = 0; // Ordinal number of the smallest element of text_char
 const last_text_char: i32 = 255; // Ordinal number of the largest element of text_char
+
+// 25
+type EightBits = u8; // Unsigned one-byte quantity
+type AlphaFile = String; // Files that contain textual data
+type ByteFile = String; // Files that contain binary data
 
 // 36
 const MemMax: usize = 30000;
@@ -1026,6 +1035,24 @@ const point_token: i32 = other_token + /*.*/46; // decimal point
 const continental_point_token: i32 = other_token + /*,*/44; // decimal point, Eurostyle
 
 
+// 480
+const closed: i32 = 2; // not open, or at end of file
+const just_open: i32 = 1; // newly opened, first line not yet read
+
+// 489
+const if_node_size: i32 = 2; // number of words in stack entry for conditionals
+// #define if_line_field(s) mem[s+1].an_int
+const if_code: i32 = 1; // code for \if... being evaluated
+const fi_code: i32 = 2; // code for \fi
+const else_code: i32 = 3; // code for \else
+const or_code: i32 = 4; // code for \or
+
+// 520
+const format_default_length: usize = 9; // length of TEX_format_default string ; NOTE: used to be 20
+const format_area_length: usize = 0; // length of its area part NOTE: used to be 11
+const format_ext_length: usize = 4; // length of its `.fmt' part
+// #define format_extension /*.fmt*/1297 // the extension as a WEB constant
+
 pub struct TexState
 {
     ready_already: i32,
@@ -1116,6 +1143,19 @@ pub struct TexState
 
     // 447
     cur_order: GlueOrd, // order of infinity found by scan_dimen
+
+    // 480
+    read_file: Array<AlphaFile>, // used for \read
+    read_open: Array<i32>, // normal..closed, state of read_file[n]
+
+    // 489
+    cond_ptr: Pointer, // top of the condition stack
+    if_limit: i32, // normal..or_code, upper bound on fi_or_else codes
+    cur_if: SmallNumber, // type of conditional being worked on
+    if_line: i32, // line where that conditional began
+
+    // 520
+    TEX_format_default: Array<char>,
 
     // 980
     page_tail: HalfWord,
@@ -1236,6 +1276,19 @@ impl TexState
 
             // 447
             cur_order: 0,
+
+            // 480
+            read_file: Array::new(0, 15), // used for \read
+            read_open: Array::new(0, 16), // normal..closed, state of read_file[n]
+            
+            // 489
+            cond_ptr: Null,
+            if_limit: 0,
+            cur_if: 0,
+            if_line: 0,
+
+            // 520
+            TEX_format_default:  Array::new(1, format_default_length+1),
 
             // 980
             page_tail: 0,
@@ -1402,10 +1455,12 @@ fn initialize(state: &mut TexState) {
 
 	// 490
 	state.cond_ptr = Null;
-	state.if_limit = normal; state.cur_if = 0; state.if_line = 0;
+	state.if_limit = Normal; state.cur_if = 0; state.if_line = 0;
 
-	// 521
-	strcpy(TEX_format_default.get_c_str(),"plain.fmt");
+    // 521
+    for (i, c) in "plain.fmt".chars().enumerate() {
+        state.TEX_format_default[i] = c;
+    }
 
 	// 551
 	for k in FontBase..=FontMax {
@@ -1427,10 +1482,10 @@ fn initialize(state: &mut TexState) {
 
 
 	// 606
-	down_ptr = null; right_ptr = null;
+	down_ptr = Null; right_ptr = Null;
 
 	// 648
-	adjust_tail = null; last_badness = 0;
+	adjust_tail = Null; last_badness = 0;
 
 	// 662
 	pack_begin_line = 0;
